@@ -6,7 +6,7 @@ import uuid
 app = FastAPI()
 
 ALLOWED_ORIGIN = "https://dash-w7a78u.example.com"
-EMAIL = "krishivpatel526@gmail.com"
+EMAIL = "24f3002540@ds.study.iitm.ac.in"
 
 
 @app.middleware("http")
