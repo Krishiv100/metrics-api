@@ -9,14 +9,26 @@ ALLOWED_ORIGIN = "https://dash-w7a78u.example.com"
 EMAIL = "24f3002540@ds.study.iitm.ac.in"
 
 
+def cors_headers(origin: str | None):
+    if origin == ALLOWED_ORIGIN:
+        return {
+            "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "600",
+            "Vary": "Origin",
+        }
+    return {}
+
+
 @app.middleware("http")
-async def add_headers_and_cors(request: Request, call_next):
+async def add_headers(request: Request, call_next):
     start_time = time.perf_counter()
     request_id = str(uuid.uuid4())
     origin = request.headers.get("origin")
 
-    # Handle OPTIONS preflight request
-    if request.method == "OPTIONS" and request.url.path == "/stats":
+    # Handle CORS preflight manually
+    if request.method == "OPTIONS":
         process_time = time.perf_counter() - start_time
 
         headers = {
@@ -24,28 +36,23 @@ async def add_headers_and_cors(request: Request, call_next):
             "X-Process-Time": f"{process_time:.6f}",
         }
 
-        # Only allowed origin gets CORS header
+        # Allowed origin gets ACAO header
         if origin == ALLOWED_ORIGIN:
-            headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
-            headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-            headers["Access-Control-Allow-Headers"] = "*"
-            headers["Vary"] = "Origin"
+            headers.update(cors_headers(origin))
             return Response(status_code=204, headers=headers)
 
-        # Other origins rejected, no Access-Control-Allow-Origin header
+        # Evil origin gets NO Access-Control-Allow-Origin
         return Response(status_code=403, headers=headers)
 
     response = await call_next(request)
 
     process_time = time.perf_counter() - start_time
-
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Process-Time"] = f"{process_time:.6f}"
 
     # Add CORS only for allowed origin
     if origin == ALLOWED_ORIGIN:
-        response.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
-        response.headers["Vary"] = "Origin"
+        response.headers.update(cors_headers(origin))
 
     return response
 
@@ -56,14 +63,14 @@ def home():
 
 
 @app.get("/stats")
-def get_stats(values: str = Query(...)):
+def stats(values: str = Query(...)):
     try:
         numbers = [int(x.strip()) for x in values.split(",") if x.strip() != ""]
-    except:
-        raise HTTPException(status_code=400, detail="Invalid numbers")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="values must be integers")
 
     if len(numbers) == 0:
-        raise HTTPException(status_code=400, detail="No values provided")
+        raise HTTPException(status_code=400, detail="values cannot be empty")
 
     total = sum(numbers)
     count = len(numbers)
@@ -74,5 +81,5 @@ def get_stats(values: str = Query(...)):
         "sum": total,
         "min": min(numbers),
         "max": max(numbers),
-        "mean": total / count
+        "mean": total / count,
     }
